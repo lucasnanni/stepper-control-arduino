@@ -18,39 +18,40 @@
 #define BTN_EN1         31
 #define BTN_EN2         33
 
-#define VMIN             0
-#define VMAX           500
-#define VPASSO          10
+#define SPEED_MIN        0
+#define SPEED_MAX      500
+#define SPEED_STEP      10
 
 #define ENC_SAME         0
 #define ENC_NEXT         1
 #define ENC_PREV        -1
 
-#define proxCiclo(x,min,max) ((x)>=(max)?(min):(x)+1)
-#define anteCiclo(x,min,max) ((x)<=(min)?(max):(x)-1)
+#define cycleNext(x,min,max) ((x)>=(max)?(min):(x)+1)
+#define cyclePrev(x,min,max) ((x)<=(min)?(max):(x)-1)
 
 AccelStepper stepper(AccelStepper::DRIVER, STEP_PIN, DIR_PIN);
 LiquidCrystal lcd(LCD_PINS_RS, LCD_PINS_ENABLE, LCD_PINS_D4, LCD_PINS_D5, LCD_PINS_D6, LCD_PINS_D7);
-RotaryEncoder encoder(BTN_EN2, BTN_EN1);
+RotaryEncoder knob(BTN_EN2, BTN_EN1);
 
-int velocidade = 1;
+int speed = SPEED_MIN;
 
-int lerEncoder() {
+int knobRead() {
   static int pos = 0;
-  encoder.tick();
-  int pos_enc = encoder.getPosition();
-  if (pos_enc > pos) {
-    pos = pos_enc;
-    return ENC_NEXT;
-  } else if (pos_enc < pos) {
-    pos = pos_enc;
-    return ENC_PREV;
+  int dir, new_pos;
+  knob.tick();
+  new_pos = knob.getPosition();
+  if (new_pos > pos) {
+    dir = ENC_NEXT;
+  } else if (new_pos < pos) {
+    dir = ENC_PREV;
+  } else {
+    dir = ENC_SAME;
   }
-  pos = pos_enc;
-  return ENC_SAME;
+  pos = new_pos;
+  return dir;
 }
 
-bool botao(int btn) {
+bool buttonRead(int btn) {
   if (digitalRead(btn) == LOW) {
     while (digitalRead(btn) == LOW);
     delay(10);
@@ -59,89 +60,89 @@ bool botao(int btn) {
   return false;
 }
 
-void menuPrincipal() {
-  int opcao_ant=-1, opcao=0;
+void mainMenu() {
+  int prev_option=-1, option=0;
   while (true) {
     lcd.clear();
-    lcd.print("  Velocidade ("); lcd.print(velocidade); lcd.print(")"); lcd.setCursor(0,1);
-    lcd.print("  Avancar >>>"); lcd.setCursor(0,2);
-    lcd.print("  Retroceder <<<"); lcd.setCursor(0,3);
+    lcd.print("  Velocidade ("); lcd.print(speed); lcd.print(")"); lcd.setCursor(0,1);
+    lcd.print("  Avancar >>>"); lcd.setCursor(0, 2);
+    lcd.print("  Retroceder <<<"); lcd.setCursor(0, 3);
     lcd.print("  Ajustar Posicao");
-    lcd.setCursor(0, opcao);
+    lcd.setCursor(0, option);
     lcd.write(0x7E);
-    while (!botao(BTN_ENTER)) {
-      int enc = lerEncoder();
+    while (!buttonRead(BTN_ENTER)) {
+      int enc = knobRead();
       if (enc != ENC_SAME) {
-        opcao_ant = opcao;
+        prev_option = option;
         if (enc == ENC_NEXT) {
-          opcao = proxCiclo(opcao, 0, 3);
+          option = cycleNext(option, 0, 3);
         } else {
-          opcao = anteCiclo(opcao, 0, 3);
+          option = cyclePrev(option, 0, 3);
         }
-        lcd.setCursor(0, opcao_ant);
+        lcd.setCursor(0, prev_option);
         lcd.print(" ");
-        lcd.setCursor(0, opcao);
+        lcd.setCursor(0, option);
         lcd.write(0x7E);
       }
     }
-    switch (opcao) {
-      case 0: opcaoVelocidade(); break;
-      case 1: opcaoAvancar(); break;
-      case 2: opcaoRetroceder(); break;
-      case 3: opcaoPosicao(); break;
+    switch (option) {
+      case 0: optionSpeed(); break;
+      case 1: optionForward(); break;
+      case 2: optionBackward(); break;
+      case 3: optionPosition(); break;
     }
   }
 }
 
-void opcaoVelocidade() {
+void optionSpeed() {
   lcd.clear();
-  lcd.print("Velocidade ("); lcd.print(VMIN); lcd.print("-"); lcd.print(VMAX); lcd.print(")");
+  lcd.print("Velocidade ("); lcd.print(SPEED_MIN); lcd.print("-"); lcd.print(SPEED_MAX); lcd.print(")");
   lcd.setCursor(0, 1);
-  lcd.write(0x7E); lcd.print(" "); lcd.print(velocidade);
-  while (!botao(BTN_ENTER)) {
-    int enc = lerEncoder();
+  lcd.write(0x7E); lcd.print(" "); lcd.print(speed);
+  while (!buttonRead(BTN_ENTER)) {
+    int enc = knobRead();
     if (enc != ENC_SAME) {
       if (enc == ENC_NEXT) {
-        velocidade = min(velocidade+VPASSO, VMAX);
+        speed = min(speed+SPEED_STEP, SPEED_MAX);
       } else {
-        velocidade = max(velocidade-VPASSO, VMIN);
+        speed = max(speed-SPEED_STEP, SPEED_MIN);
       }
       lcd.setCursor(2, 1); lcd.print("   "); lcd.setCursor(2, 1);
-      lcd.print(velocidade);
+      lcd.print(speed);
       lcd.setCursor(0, 3); lcd.print("[Enter] p/ salvar");
     }
   }
 }
 
-void opcaoAvancar() {
+void optionForward() {
   lcd.clear();
   lcd.print("Avancando ...");
   lcd.setCursor(0, 1);
-  lcd.print("Velocidade = "); lcd.print(velocidade);
+  lcd.print("Velocidade = "); lcd.print(speed);
   lcd.setCursor(0, 3);
   lcd.print("[Stop] p/ parar");
-  stepper.setSpeed(velocidade);
-  while(!botao(BTN_STOP)) {
+  stepper.setSpeed(speed);
+  while(!buttonRead(BTN_STOP)) {
     stepper.runSpeed();
   }
   stepper.setSpeed(0);
 }
 
-void opcaoRetroceder() {
+void optionBackward() {
   lcd.clear();
   lcd.print("Retrocedendo ...");
   lcd.setCursor(0, 1);
-  lcd.print("Velocidade = "); lcd.print(velocidade);
+  lcd.print("Velocidade = "); lcd.print(speed);
   lcd.setCursor(0, 3);
   lcd.print("[Stop] p/ parar");
-  stepper.setSpeed(-velocidade);
-  while(!botao(BTN_STOP)) {
+  stepper.setSpeed(-speed);
+  while(!buttonRead(BTN_STOP)) {
     stepper.runSpeed();
   }
   stepper.setSpeed(0);
 }
 
-void opcaoPosicao() {
+void optionPosition() {
   int dir = 0;
   lcd.clear();
   lcd.print("Posicao:");
@@ -149,8 +150,8 @@ void opcaoPosicao() {
   lcd.setCursor(1, 11); lcd.write(0x7E);
   lcd.setCursor(5, 1); lcd.print("[   |   ]");
   lcd.setCursor(0, 3); lcd.print("[Stop] p/ sair");
-  while (!botao(BTN_STOP)) {
-    int enc = lerEncoder();
+  while (!buttonRead(BTN_STOP)) {
+    int enc = knobRead();
     if (enc != ENC_SAME) {
       if (enc == ENC_NEXT) {
         dir = min(dir+1, 3);
@@ -177,12 +178,12 @@ void opcaoPosicao() {
 void setup() {  
   stepper.setPinsInverted(false, false, true);
   stepper.setEnablePin(ENABLE_PIN);
-  stepper.setMaxSpeed(VMAX);
+  stepper.setMaxSpeed(SPEED_MAX);
   lcd.begin(20, 4);
   pinMode(BTN_ENTER, INPUT_PULLUP);
   pinMode(BTN_STOP, INPUT_PULLUP);
 }
 
 void loop() {  
-  menuPrincipal();
+  mainMenu();
 }
